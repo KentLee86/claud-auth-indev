@@ -131,13 +131,22 @@ async function interactiveChat() {
         
         const stream = chatStream(messages)
         let fullResponse = ''
+        const startTime = performance.now()
         
-        for await (const chunk of stream) {
-          process.stdout.write(chunk)
-          fullResponse += chunk
+        let result = await stream.next()
+        while (!result.done) {
+          process.stdout.write(result.value)
+          fullResponse += result.value
+          result = await stream.next()
         }
         
+        const elapsed = (performance.now() - startTime) / 1000
+        const response = result.value
+        const tokensPerSec = response.usage.outputTokens / elapsed
+        
         console.log('\n')
+        console.log(`[${response.usage.inputTokens} in / ${response.usage.outputTokens} out | ${tokensPerSec.toFixed(1)} tok/s | ${elapsed.toFixed(1)}s]`)
+        console.log('')
         messages.push({ role: 'assistant', content: fullResponse })
       } catch (error) {
         console.error('\nError:', error)
@@ -161,12 +170,20 @@ async function singleAsk(question: string) {
     process.stdout.write('Claude: ')
     
     const stream = chatStream([{ role: 'user', content: question }])
+    const startTime = performance.now()
     
-    for await (const chunk of stream) {
-      process.stdout.write(chunk)
+    let result = await stream.next()
+    while (!result.done) {
+      process.stdout.write(result.value)
+      result = await stream.next()
     }
     
-    console.log('')
+    const elapsed = (performance.now() - startTime) / 1000
+    const response = result.value
+    const tokensPerSec = response.usage.outputTokens / elapsed
+    
+    console.log('\n')
+    console.log(`[${response.usage.inputTokens} in / ${response.usage.outputTokens} out | ${tokensPerSec.toFixed(1)} tok/s | ${elapsed.toFixed(1)}s]`)
   } catch (error) {
     console.error('Error:', error)
     process.exit(1)
