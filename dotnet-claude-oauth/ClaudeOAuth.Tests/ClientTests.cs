@@ -82,18 +82,21 @@ public class ClientTests
             usage = new { input_tokens = 10, output_tokens = 5 }
         };
 
-        HttpRequestMessage? capturedRequest = null;
+        string? capturedContent = null;
         var mockHandler = new Mock<HttpMessageHandler>();
         mockHandler.Protected()
             .Setup<Task<HttpResponseMessage>>(
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .Callback<HttpRequestMessage, CancellationToken>((req, _) => capturedRequest = req)
-            .ReturnsAsync(new HttpResponseMessage
+            .Returns<HttpRequestMessage, CancellationToken>(async (req, _) =>
             {
-                StatusCode = HttpStatusCode.OK,
-                Content = new StringContent(JsonSerializer.Serialize(apiResponse))
+                capturedContent = await req.Content!.ReadAsStringAsync();
+                return new HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.OK,
+                    Content = new StringContent(JsonSerializer.Serialize(apiResponse))
+                };
             });
 
         var oauthHandler = CreateMockOAuthHandler();
@@ -109,11 +112,10 @@ public class ClientTests
 
         await client.ChatAsync([Message.User("Hi")], options);
 
-        Assert.NotNull(capturedRequest);
-        var content = await capturedRequest!.Content!.ReadAsStringAsync();
-        Assert.Contains("claude-sonnet-4-5", content);
-        Assert.Contains("2048", content);
-        Assert.Contains("You are a helpful assistant", content);
+        Assert.NotNull(capturedContent);
+        Assert.Contains("claude-sonnet-4-5", capturedContent);
+        Assert.Contains("2048", capturedContent);
+        Assert.Contains("You are a helpful assistant", capturedContent);
     }
 
     [Fact]
