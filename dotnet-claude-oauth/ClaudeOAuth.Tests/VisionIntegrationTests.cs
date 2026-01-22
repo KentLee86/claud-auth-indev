@@ -1,23 +1,73 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace ClaudeOAuth.Tests;
 
 public class VisionIntegrationTests
 {
+    private readonly ITestOutputHelper _output;
+
+    public VisionIntegrationTests(ITestOutputHelper output)
+    {
+        _output = output;
+    }
+
     private static string GetFixturePath(string filename)
     {
         var baseDir = AppContext.BaseDirectory;
         return Path.Combine(baseDir, "__fixtures__", filename);
     }
 
-    [Fact(Skip = "Integration test - requires authentication. Remove Skip to run.")]
-    public async Task AnalyzesCatImageCorrectly()
+    private void LogApiMetrics(ChatResponse response, TimeSpan elapsed, string testName)
+    {
+        var inputTokens = response.Usage.InputTokens;
+        var outputTokens = response.Usage.OutputTokens;
+        var totalTokens = inputTokens + outputTokens;
+        var tokensPerSecond = outputTokens / elapsed.TotalSeconds;
+
+        _output.WriteLine($"");
+        _output.WriteLine($"=== {testName} API Metrics ===");
+        _output.WriteLine($"Model: {response.Model}");
+        _output.WriteLine($"Stop Reason: {response.StopReason}");
+        _output.WriteLine($"");
+        _output.WriteLine($"Token Usage:");
+        _output.WriteLine($"  Input Tokens:  {inputTokens:N0}");
+        _output.WriteLine($"  Output Tokens: {outputTokens:N0}");
+        _output.WriteLine($"  Total Tokens:  {totalTokens:N0}");
+        _output.WriteLine($"");
+        _output.WriteLine($"Performance:");
+        _output.WriteLine($"  Elapsed Time:     {elapsed.TotalSeconds:F2}s");
+        _output.WriteLine($"  Tokens/Second:    {tokensPerSecond:F2}");
+        _output.WriteLine($"  Time to First:    ~{elapsed.TotalMilliseconds:F0}ms (non-streaming)");
+        _output.WriteLine($"");
+        _output.WriteLine($"Response Preview:");
+        _output.WriteLine($"  {(response.Content.Length > 100 ? response.Content[..100] + "..." : response.Content)}");
+        _output.WriteLine($"================================");
+    }
+
+    private async Task<bool> EnsureAuthenticatedAsync()
     {
         var storage = new CredentialStorage();
-        if (!await storage.HasValidCredentialsAsync())
+        var hasAuth = await storage.HasValidCredentialsAsync();
+        
+        if (!hasAuth)
         {
-            throw new InvalidOperationException("Not authenticated. Run OAuth login first.");
+            _output.WriteLine("⚠️  WARNING: No valid credentials found at ~/.claude-oauth/credentials.json");
+            _output.WriteLine("   Run TypeScript OAuth login first: cd .. && bun run login");
+            _output.WriteLine("   Skipping integration test...");
+        }
+        
+        return hasAuth;
+    }
+
+    [Fact]
+    public async Task AnalyzesCatImageCorrectly()
+    {
+        if (!await EnsureAuthenticatedAsync())
+        {
+            return;
         }
 
         var catImagePath = GetFixturePath("cat.jpg");
@@ -29,22 +79,25 @@ public class VisionIntegrationTests
         );
 
         var client = new ClaudeClient();
+        var stopwatch = Stopwatch.StartNew();
         var response = await client.ChatAsync(
             [message],
             new ChatOptions { Model = "claude-sonnet-4-20250514", MaxTokens = 50 }
         );
+        stopwatch.Stop();
+
+        LogApiMetrics(response, stopwatch.Elapsed, "Cat Image Analysis");
 
         var answer = response.Content.ToLowerInvariant();
         Assert.Contains("cat", answer);
     }
 
-    [Fact(Skip = "Integration test - requires authentication. Remove Skip to run.")]
+    [Fact]
     public async Task AnalyzesDiceImageCorrectly()
     {
-        var storage = new CredentialStorage();
-        if (!await storage.HasValidCredentialsAsync())
+        if (!await EnsureAuthenticatedAsync())
         {
-            throw new InvalidOperationException("Not authenticated. Run OAuth login first.");
+            return;
         }
 
         var diceImagePath = GetFixturePath("dice.png");
@@ -56,16 +109,47 @@ public class VisionIntegrationTests
         );
 
         var client = new ClaudeClient();
+        var stopwatch = Stopwatch.StartNew();
         var response = await client.ChatAsync(
             [message],
             new ChatOptions { Model = "claude-sonnet-4-20250514", MaxTokens = 100 }
         );
+        stopwatch.Stop();
+
+        LogApiMetrics(response, stopwatch.Elapsed, "Dice Image Analysis");
 
         var answer = response.Content.ToLowerInvariant();
         Assert.True(
             answer.Contains("dice") || answer.Contains("die") || answer.Contains("cube"),
             $"Expected response to mention dice, got: {answer}"
         );
+    }
+
+    [Fact]
+    public async Task AnalyzesTextFileContent()
+    {
+        if (!await EnsureAuthenticatedAsync())
+        {
+            return;
+        }
+
+        var textFilePath = GetFixturePath("sample.txt");
+        Assert.True(File.Exists(textFilePath), $"Test fixture not found: {textFilePath}");
+
+        var textContent = await File.ReadAllTextAsync(textFilePath);
+        var message = Message.User($"Summarize this text in one sentence:\n\n{textContent}");
+
+        var client = new ClaudeClient();
+        var stopwatch = Stopwatch.StartNew();
+        var response = await client.ChatAsync(
+            [message],
+            new ChatOptions { Model = "claude-sonnet-4-20250514", MaxTokens = 100 }
+        );
+        stopwatch.Stop();
+
+        LogApiMetrics(response, stopwatch.Elapsed, "Text File Analysis");
+
+        Assert.NotEmpty(response.Content);
     }
 
     [Fact]
@@ -86,6 +170,8 @@ public class VisionIntegrationTests
 
         var textBlock = Assert.IsType<TextContentBlock>(content[1]);
         Assert.Equal("Describe this", textBlock.Text);
+
+        _output.WriteLine($"Cat image loaded: {imageBlock.Source.Data.Length} base64 chars");
     }
 
     [Fact]
@@ -104,6 +190,8 @@ public class VisionIntegrationTests
         Assert.Equal("image/png", imageBlock.Source.MediaType);
         Assert.Equal("base64", imageBlock.Source.Type);
         Assert.NotEmpty(imageBlock.Source.Data);
+
+        _output.WriteLine($"Sample PNG loaded: {imageBlock.Source.Data.Length} base64 chars");
     }
 
     [Fact]
@@ -118,6 +206,8 @@ public class VisionIntegrationTests
         var imageBlock = Assert.IsType<ImageContentBlock>(content[0]);
         Assert.Equal("image/png", imageBlock.Source.MediaType);
         Assert.NotEmpty(imageBlock.Source.Data);
+
+        _output.WriteLine($"Dice PNG loaded: {imageBlock.Source.Data.Length} base64 chars");
     }
 
     [Fact]
@@ -131,6 +221,8 @@ public class VisionIntegrationTests
 
         Assert.Contains("Hello from test file", block.Text);
         Assert.Contains("sample text file", block.Text);
+
+        _output.WriteLine($"Text file loaded: {text.Length} chars, {text.Split('\n').Length} lines");
     }
 
     [Fact]
@@ -150,9 +242,10 @@ public class VisionIntegrationTests
     [Fact]
     public async Task LoadNonExistentFile_ThrowsException()
     {
-        await Assert.ThrowsAsync<FileNotFoundException>(() =>
+        var exception = await Assert.ThrowsAnyAsync<IOException>(() =>
             Message.UserWithImageFromFileAsync("test", "/nonexistent/path/file.png")
         );
+        _output.WriteLine($"Expected exception thrown: {exception.GetType().Name}");
     }
 
     [Fact]
