@@ -26,4 +26,10 @@
     <ProjectReference Include="..\ClaudeOAuth\ClaudeOAuth.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="__fixtures__\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
