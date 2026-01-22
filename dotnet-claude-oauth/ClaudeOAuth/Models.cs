@@ -35,32 +35,87 @@ public record ClaudeOAuthCredentials
 /// <param name="CodeVerifier">The PKCE code verifier to use when exchanging the code</param>
 public record OAuthFlowResult(string AuthUrl, string CodeVerifier);
 
-/// <summary>
-/// Chat message.
-/// </summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonDerivedType(typeof(TextContentBlock), "text")]
+[JsonDerivedType(typeof(ImageContentBlock), "image")]
+public abstract record MessageContentBlock;
+
+public record TextContentBlock : MessageContentBlock
+{
+    [JsonPropertyName("text")]
+    public required string Text { get; init; }
+}
+
+public record ImageSource
+{
+    [JsonPropertyName("type")]
+    public string Type => "base64";
+
+    [JsonPropertyName("media_type")]
+    public required string MediaType { get; init; }
+
+    [JsonPropertyName("data")]
+    public required string Data { get; init; }
+}
+
+public record ImageContentBlock : MessageContentBlock
+{
+    [JsonPropertyName("source")]
+    public required ImageSource Source { get; init; }
+}
+
 public record Message
 {
-    /// <summary>
-    /// The role of the message sender.
-    /// </summary>
     [JsonPropertyName("role")]
     public required string Role { get; init; }
 
-    /// <summary>
-    /// The content of the message.
-    /// </summary>
     [JsonPropertyName("content")]
-    public required string Content { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public object? Content { get; init; }
 
-    /// <summary>
-    /// Create a user message.
-    /// </summary>
     public static Message User(string content) => new() { Role = "user", Content = content };
 
-    /// <summary>
-    /// Create an assistant message.
-    /// </summary>
     public static Message Assistant(string content) => new() { Role = "assistant", Content = content };
+
+    public static Message User(params MessageContentBlock[] contentBlocks) =>
+        new() { Role = "user", Content = contentBlocks };
+
+    public static Message UserWithImage(string text, string base64ImageData, string mediaType = "image/png")
+    {
+        return new Message
+        {
+            Role = "user",
+            Content = new MessageContentBlock[]
+            {
+                new ImageContentBlock
+                {
+                    Source = new ImageSource { MediaType = mediaType, Data = base64ImageData }
+                },
+                new TextContentBlock { Text = text }
+            }
+        };
+    }
+
+    public static Message UserWithImage(string text, byte[] imageData, string mediaType = "image/png")
+    {
+        return UserWithImage(text, Convert.ToBase64String(imageData), mediaType);
+    }
+
+    public static async Task<Message> UserWithImageFromFileAsync(string text, string filePath)
+    {
+        var imageData = await File.ReadAllBytesAsync(filePath);
+        var mediaType = GetMediaTypeFromExtension(Path.GetExtension(filePath));
+        return UserWithImage(text, imageData, mediaType);
+    }
+
+    private static string GetMediaTypeFromExtension(string extension) => extension.ToLowerInvariant() switch
+    {
+        ".png" => "image/png",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".gif" => "image/gif",
+        ".webp" => "image/webp",
+        _ => "image/png"
+    };
 }
 
 /// <summary>
@@ -222,6 +277,15 @@ internal record RefreshTokenRequest
     public required string ClientId { get; init; }
 }
 
+internal record ChatRequestMessage
+{
+    [JsonPropertyName("role")]
+    public required string Role { get; init; }
+
+    [JsonPropertyName("content")]
+    public required object Content { get; init; }
+}
+
 internal record ChatRequest
 {
     [JsonPropertyName("model")]
@@ -234,7 +298,7 @@ internal record ChatRequest
     public string? System { get; init; }
 
     [JsonPropertyName("messages")]
-    public required List<Message> Messages { get; init; }
+    public required List<ChatRequestMessage> Messages { get; init; }
 
     [JsonPropertyName("stream")]
     public bool? Stream { get; init; }

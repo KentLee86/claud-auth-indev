@@ -280,4 +280,126 @@ public class ClientTests
             }
         });
     }
+
+    [Fact]
+    public void TextContentBlock_SerializesCorrectly()
+    {
+        var block = new TextContentBlock { Text = "Hello" };
+
+        Assert.Equal("Hello", block.Text);
+        var json = JsonSerializer.Serialize<MessageContentBlock>(block);
+        Assert.Contains("\"type\":\"text\"", json);
+        Assert.Contains("\"text\":\"Hello\"", json);
+    }
+
+    [Fact]
+    public void ImageContentBlock_SerializesCorrectly()
+    {
+        var block = new ImageContentBlock
+        {
+            Source = new ImageSource { MediaType = "image/png", Data = "base64data" }
+        };
+
+        Assert.Equal("base64", block.Source.Type);
+        Assert.Equal("image/png", block.Source.MediaType);
+        Assert.Equal("base64data", block.Source.Data);
+        
+        var json = JsonSerializer.Serialize<MessageContentBlock>(block);
+        Assert.Contains("\"type\":\"image\"", json);
+        Assert.Contains("\"media_type\":\"image/png\"", json);
+    }
+
+    [Fact]
+    public void Message_UserWithContentBlocks_CreatesCorrectMessage()
+    {
+        var message = Message.User(
+            new TextContentBlock { Text = "What is this?" },
+            new ImageContentBlock
+            {
+                Source = new ImageSource { MediaType = "image/jpeg", Data = "imagedata" }
+            }
+        );
+
+        Assert.Equal("user", message.Role);
+        var content = Assert.IsType<MessageContentBlock[]>(message.Content);
+        Assert.Equal(2, content.Length);
+        Assert.IsType<TextContentBlock>(content[0]);
+        Assert.IsType<ImageContentBlock>(content[1]);
+    }
+
+    [Fact]
+    public void Message_UserWithImage_CreatesCorrectMessage()
+    {
+        var message = Message.UserWithImage("Describe this image", "base64imagedata", "image/png");
+
+        Assert.Equal("user", message.Role);
+        var content = Assert.IsType<MessageContentBlock[]>(message.Content);
+        Assert.Equal(2, content.Length);
+
+        var imageBlock = Assert.IsType<ImageContentBlock>(content[0]);
+        Assert.Equal("image/png", imageBlock.Source.MediaType);
+        Assert.Equal("base64imagedata", imageBlock.Source.Data);
+
+        var textBlock = Assert.IsType<TextContentBlock>(content[1]);
+        Assert.Equal("Describe this image", textBlock.Text);
+    }
+
+    [Fact]
+    public void Message_UserWithImage_FromBytes_EncodesCorrectly()
+    {
+        var imageBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47 };
+        var message = Message.UserWithImage("What is this?", imageBytes, "image/png");
+
+        Assert.Equal("user", message.Role);
+        var content = Assert.IsType<MessageContentBlock[]>(message.Content);
+        var imageBlock = Assert.IsType<ImageContentBlock>(content[0]);
+
+        Assert.Equal(Convert.ToBase64String(imageBytes), imageBlock.Source.Data);
+    }
+
+    [Fact]
+    public async Task ChatAsync_WithVisionContent_SendsCorrectPayload()
+    {
+        var apiResponse = new
+        {
+            id = "msg_123",
+            type = "message",
+            role = "assistant",
+            content = new[] { new { type = "text", text = "This is an image of a cat." } },
+            model = "claude-opus-4-5",
+            stop_reason = "end_turn",
+            usage = new { input_tokens = 100, output_tokens = 10 }
+        };
+
+        string? capturedContent = null;
+        var mockHandler = new Mock<HttpMessageHandler>();
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Returns<HttpRequestMessage, CancellationToken>(async (req, _) =>
+            {
+                capturedContent = await req.Content!.ReadAsStringAsync();
+                return new HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.OK,
+                    Content = new StringContent(JsonSerializer.Serialize(apiResponse))
+                };
+            });
+
+        var oauthHandler = CreateMockOAuthHandler();
+        var httpClient = new HttpClient(mockHandler.Object);
+        var client = new ClaudeClient(oauthHandler, httpClient);
+
+        var visionMessage = Message.UserWithImage("What is in this image?", "base64data", "image/jpeg");
+        var response = await client.ChatAsync([visionMessage]);
+
+        Assert.NotNull(capturedContent);
+        Assert.Contains("\"type\":\"image\"", capturedContent);
+        Assert.Contains("base64data", capturedContent);
+        Assert.Contains("image/jpeg", capturedContent);
+        Assert.Contains("What is in this image?", capturedContent);
+        Assert.Equal("This is an image of a cat.", response.Content);
+    }
 }

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace ClaudeOAuth;
 
@@ -13,6 +14,12 @@ public class ClaudeClient
     private const string ClaudeCodeSystemPrefix = "You are Claude Code, Anthropic's official CLI for Claude.";
     private const string AnthropicBetaFlags = "oauth-2025-04-20,interleaved-thinking-2025-05-14";
     private const string UserAgent = "claude-cli/2.1.2 (external, cli)";
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     private readonly OAuthHandler _oauthHandler;
     private readonly HttpClient _httpClient;
@@ -37,7 +44,11 @@ public class ClaudeClient
             Model = options.Model ?? DefaultModel,
             MaxTokens = options.MaxTokens ?? DefaultMaxTokens,
             System = systemPrompt,
-            Messages = messages.ToList()
+            Messages = messages.Select(m => new ChatRequestMessage
+            {
+                Role = m.Role,
+                Content = m.Content ?? ""
+            }).ToList()
         };
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{Constants.AnthropicApiUrl}/messages?beta=true");
@@ -45,7 +56,11 @@ public class ClaudeClient
         httpRequest.Headers.Add("anthropic-version", "2023-06-01");
         httpRequest.Headers.Add("anthropic-beta", AnthropicBetaFlags);
         httpRequest.Headers.Add("User-Agent", UserAgent);
-        httpRequest.Content = JsonContent.Create(request);
+        httpRequest.Content = new StringContent(
+            JsonSerializer.Serialize(request, JsonOptions),
+            Encoding.UTF8,
+            "application/json"
+        );
 
         var response = await _httpClient.SendAsync(httpRequest);
 
@@ -89,7 +104,11 @@ public class ClaudeClient
             Model = options.Model ?? DefaultModel,
             MaxTokens = options.MaxTokens ?? DefaultMaxTokens,
             System = systemPrompt,
-            Messages = messages.ToList(),
+            Messages = messages.Select(m => new ChatRequestMessage
+            {
+                Role = m.Role,
+                Content = m.Content ?? ""
+            }).ToList(),
             Stream = true
         };
 
@@ -98,7 +117,11 @@ public class ClaudeClient
         httpRequest.Headers.Add("anthropic-version", "2023-06-01");
         httpRequest.Headers.Add("anthropic-beta", AnthropicBetaFlags);
         httpRequest.Headers.Add("User-Agent", UserAgent);
-        httpRequest.Content = JsonContent.Create(request);
+        httpRequest.Content = new StringContent(
+            JsonSerializer.Serialize(request, JsonOptions),
+            Encoding.UTF8,
+            "application/json"
+        );
 
         var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
