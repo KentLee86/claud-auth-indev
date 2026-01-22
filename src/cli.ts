@@ -14,8 +14,8 @@ import { chat, chatStream, type Message } from './lib/client'
 
 const MODELS = {
   haiku: 'claude-haiku-4-5-20251001',
-  sonnet: 'claude-sonnet-4-20250514',
-  opus: 'claude-opus-4-20250514',
+  sonnet: 'claude-sonnet-4-5-20250929',
+  opus: 'claude-opus-4-5-20251101',
 } as const
 
 type ModelKey = keyof typeof MODELS
