@@ -1,0 +1,117 @@
+# ClaudeOAuth .NET Library - Test Commands
+
+# Default: show available commands
+default:
+    @just --list
+
+# Run all tests
+test:
+    dotnet test --logger "console;verbosity=normal"
+
+# Run all tests with detailed output
+test-verbose:
+    dotnet test --logger "console;verbosity=detailed"
+
+# Run only vision integration tests (cat, dice, text file)
+test-vision:
+    dotnet test --filter "AnalyzesCat|AnalyzesDice|AnalyzesText" --logger "console;verbosity=detailed"
+
+# Run only cat image test
+test-cat:
+    dotnet test --filter "AnalyzesCatImageCorrectly" --logger "console;verbosity=detailed"
+
+# Run only dice image test
+test-dice:
+    dotnet test --filter "AnalyzesDiceImageCorrectly" --logger "console;verbosity=detailed"
+
+# Run only text file test
+test-text:
+    dotnet test --filter "AnalyzesTextFileContent" --logger "console;verbosity=detailed"
+
+# Run all VisionIntegrationTests (including unit tests)
+test-vision-all:
+    dotnet test --filter "VisionIntegrationTests" --logger "console;verbosity=detailed"
+
+# Run unit tests only (exclude integration tests that call API)
+test-unit:
+    dotnet test --filter "FullyQualifiedName!~Analyzes" --logger "console;verbosity=normal"
+
+# Run PKCE tests
+test-pkce:
+    dotnet test --filter "PkceTests" --logger "console;verbosity=detailed"
+
+# Run OAuth tests
+test-oauth:
+    dotnet test --filter "OAuthTests" --logger "console;verbosity=detailed"
+
+# Run Storage tests
+test-storage:
+    dotnet test --filter "StorageTests" --logger "console;verbosity=detailed"
+
+# Run Client tests
+test-client:
+    dotnet test --filter "ClientTests" --logger "console;verbosity=detailed"
+
+# Build the solution
+build:
+    dotnet build
+
+# Clean build artifacts
+clean:
+    dotnet clean
+
+# Restore dependencies
+restore:
+    dotnet restore
+
+# Build release version
+build-release:
+    dotnet build -c Release
+
+# Run tests with coverage
+test-coverage:
+    dotnet test --collect:"XPlat Code Coverage"
+
+# Check if authenticated (uses TypeScript credentials)
+check-auth:
+    @echo "Checking for credentials at ~/.claude-oauth/credentials.json..."
+    @if [ -f ~/.claude-oauth/credentials.json ]; then \
+        echo "✓ Credentials file found"; \
+        echo "  Expires at: $$(cat ~/.claude-oauth/credentials.json | grep -o '"expiresAt":[0-9]*' | cut -d: -f2)"; \
+    else \
+        echo "✗ No credentials found"; \
+        echo "  Run: cd .. && bun run login"; \
+    fi
+
+# Quick test - run fast unit tests only
+quick:
+    dotnet test --filter "FullyQualifiedName!~Analyzes&FullyQualifiedName!~Integration" --logger "console;verbosity=normal"
+
+# Watch mode - rebuild on changes (requires dotnet watch)
+watch:
+    dotnet watch test --project ClaudeOAuth.Tests
+
+# Pack NuGet package
+pack:
+    dotnet pack ClaudeOAuth -c Release
+
+# Show test summary
+summary:
+    @echo "=== ClaudeOAuth Test Summary ==="
+    @echo ""
+    @echo "Unit Tests:"
+    @echo "  just test-pkce     - PKCE utilities (10 tests)"
+    @echo "  just test-storage  - Credential storage (8 tests)"
+    @echo "  just test-oauth    - OAuth flow (10 tests)"
+    @echo "  just test-client   - API client (16 tests)"
+    @echo ""
+    @echo "Integration Tests (require auth):"
+    @echo "  just test-cat      - Cat image analysis"
+    @echo "  just test-dice     - Dice image analysis"
+    @echo "  just test-text     - Text file analysis"
+    @echo "  just test-vision   - All vision tests"
+    @echo ""
+    @echo "Other:"
+    @echo "  just test          - Run all tests"
+    @echo "  just quick         - Fast unit tests only"
+    @echo "  just check-auth    - Check authentication status"
