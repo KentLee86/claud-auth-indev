@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <PackageId>ClaudeOAuth</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Claude OAuth Contributors</Authors>
+    <Description>OAuth client library for Claude API using PKCE flow</Description>
+    <PackageTags>claude;oauth;anthropic;api;pkce</PackageTags>
+    <RepositoryUrl>https://github.com/example/dotnet-claude-oauth</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+</Project>
