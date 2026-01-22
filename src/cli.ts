@@ -12,6 +12,14 @@ import {
 } from './lib/storage'
 import { chat, chatStream, type Message } from './lib/client'
 
+const MODELS = {
+  haiku: 'claude-haiku-4-5-20251001',
+  sonnet: 'claude-sonnet-4-20250514',
+  opus: 'claude-opus-4-20250514',
+} as const
+
+type ModelKey = keyof typeof MODELS
+
 const HELP = `
 Claude OAuth Client
 
@@ -100,63 +108,198 @@ async function interactiveChat() {
     process.exit(1)
   }
 
-  console.log('Interactive chat with Claude. Type "exit" to quit.\n')
-
-  const rl = require('readline').createInterface({
+  const readline = await import('readline')
+  const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
   })
 
+  if (process.stdin.isTTY) {
+    process.stdin.setRawMode(true)
+  }
+  readline.emitKeypressEvents(process.stdin)
+
   const messages: Message[] = []
+  let currentModel: ModelKey = 'sonnet'
+  let inputBuffer = ''
+  let cursorPos = 0
 
-  const askQuestion = () => {
-    rl.question('You: ', async (input: string) => {
-      const trimmed = input.trim()
-      
-      if (trimmed.toLowerCase() === 'exit') {
-        console.log('Goodbye!')
-        rl.close()
-        return
-      }
-
-      if (!trimmed) {
-        askQuestion()
-        return
-      }
-
-      messages.push({ role: 'user', content: trimmed })
-
-      try {
-        process.stdout.write('Claude: ')
-        
-        const stream = chatStream(messages)
-        let fullResponse = ''
-        const startTime = performance.now()
-        
-        let result = await stream.next()
-        while (!result.done) {
-          process.stdout.write(result.value)
-          fullResponse += result.value
-          result = await stream.next()
-        }
-        
-        const elapsed = (performance.now() - startTime) / 1000
-        const response = result.value
-        const tokensPerSec = response.usage.outputTokens / elapsed
-        
-        console.log('\n')
-        console.log(`[${response.usage.inputTokens} in / ${response.usage.outputTokens} out | ${tokensPerSec.toFixed(1)} tok/s | ${elapsed.toFixed(1)}s]`)
-        console.log('')
-        messages.push({ role: 'assistant', content: fullResponse })
-      } catch (error) {
-        console.error('\nError:', error)
-      }
-
-      askQuestion()
-    })
+  const clearLine = () => {
+    process.stdout.write('\r\x1b[K')
   }
 
-  askQuestion()
+  const renderPrompt = () => {
+    clearLine()
+    const modelIndicator = `\x1b[90m[${currentModel}]\x1b[0m`
+    process.stdout.write(`${modelIndicator} You: ${inputBuffer}`)
+    const promptLen = `[${currentModel}] You: `.length
+    const moveBack = inputBuffer.length - cursorPos
+    if (moveBack > 0) {
+      process.stdout.write(`\x1b[${moveBack}D`)
+    }
+  }
+
+  const printHelp = () => {
+    console.log('\n')
+    console.log('\x1b[90m┌─────────────────────────────────────┐\x1b[0m')
+    console.log('\x1b[90m│\x1b[0m  \x1b[1mCommands\x1b[0m                          \x1b[90m│\x1b[0m')
+    console.log('\x1b[90m├─────────────────────────────────────┤\x1b[0m')
+    console.log('\x1b[90m│\x1b[0m  \x1b[33m/haiku\x1b[0m   Switch to Haiku          \x1b[90m│\x1b[0m')
+    console.log('\x1b[90m│\x1b[0m  \x1b[33m/sonnet\x1b[0m  Switch to Sonnet         \x1b[90m│\x1b[0m')
+    console.log('\x1b[90m│\x1b[0m  \x1b[33m/opus\x1b[0m    Switch to Opus           \x1b[90m│\x1b[0m')
+    console.log('\x1b[90m│\x1b[0m  \x1b[33m/help\x1b[0m    Show this help           \x1b[90m│\x1b[0m')
+    console.log('\x1b[90m│\x1b[0m  \x1b[33m/exit\x1b[0m    Exit                      \x1b[90m│\x1b[0m')
+    console.log('\x1b[90m└─────────────────────────────────────┘\x1b[0m')
+    console.log('')
+    renderPrompt()
+  }
+
+  const handleCommand = (cmd: string): boolean => {
+    const lower = cmd.toLowerCase()
+    if (lower === '/haiku') {
+      switchModel('haiku')
+      return true
+    }
+    if (lower === '/sonnet') {
+      switchModel('sonnet')
+      return true
+    }
+    if (lower === '/opus') {
+      switchModel('opus')
+      return true
+    }
+    if (lower === '/help') {
+      printHelp()
+      return true
+    }
+    if (lower === '/exit' || lower === 'exit') {
+      console.log('\nGoodbye!')
+      process.exit(0)
+    }
+    return false
+  }
+
+  const sendMessage = async () => {
+    const trimmed = inputBuffer.trim()
+    inputBuffer = ''
+    cursorPos = 0
+
+    if (!trimmed) {
+      renderPrompt()
+      return
+    }
+
+    if (handleCommand(trimmed)) {
+      return
+    }
+
+    messages.push({ role: 'user', content: trimmed })
+    console.log('')
+
+    try {
+      process.stdout.write('\x1b[36mClaude:\x1b[0m ')
+      
+      const stream = chatStream(messages, { model: MODELS[currentModel] })
+      let fullResponse = ''
+      const startTime = performance.now()
+      
+      let result = await stream.next()
+      while (!result.done) {
+        process.stdout.write(result.value)
+        fullResponse += result.value
+        result = await stream.next()
+      }
+      
+      const elapsed = (performance.now() - startTime) / 1000
+      const response = result.value
+      const tokensPerSec = response.usage.outputTokens / elapsed
+      
+      console.log('\n')
+      console.log(`\x1b[90m[${response.usage.inputTokens} in / ${response.usage.outputTokens} out | ${tokensPerSec.toFixed(1)} tok/s | ${elapsed.toFixed(1)}s]\x1b[0m`)
+      console.log('')
+      messages.push({ role: 'assistant', content: fullResponse })
+    } catch (error) {
+      console.error('\n\x1b[31mError:\x1b[0m', error)
+      console.log('')
+    }
+
+    renderPrompt()
+  }
+
+  const switchModel = (model: ModelKey) => {
+    currentModel = model
+    clearLine()
+    console.log(`\x1b[32m✓ Switched to ${model}\x1b[0m`)
+    renderPrompt()
+  }
+
+  process.stdin.on('keypress', async (str, key) => {
+    if (!key) return
+
+    if (key.ctrl && key.name === 'c') {
+      console.log('\nGoodbye!')
+      process.exit(0)
+    }
+
+    if (key.name === 'return') {
+      await sendMessage()
+      return
+    }
+
+    if (key.name === 'backspace') {
+      if (cursorPos > 0) {
+        inputBuffer = inputBuffer.slice(0, cursorPos - 1) + inputBuffer.slice(cursorPos)
+        cursorPos--
+        renderPrompt()
+      }
+      return
+    }
+
+    if (key.name === 'delete') {
+      if (cursorPos < inputBuffer.length) {
+        inputBuffer = inputBuffer.slice(0, cursorPos) + inputBuffer.slice(cursorPos + 1)
+        renderPrompt()
+      }
+      return
+    }
+
+    if (key.name === 'left') {
+      if (cursorPos > 0) {
+        cursorPos--
+        renderPrompt()
+      }
+      return
+    }
+    if (key.name === 'right') {
+      if (cursorPos < inputBuffer.length) {
+        cursorPos++
+        renderPrompt()
+      }
+      return
+    }
+
+    if (key.name === 'home') {
+      cursorPos = 0
+      renderPrompt()
+      return
+    }
+    if (key.name === 'end') {
+      cursorPos = inputBuffer.length
+      renderPrompt()
+      return
+    }
+
+    if (str && !key.ctrl && !key.meta) {
+      inputBuffer = inputBuffer.slice(0, cursorPos) + str + inputBuffer.slice(cursorPos)
+      cursorPos += str.length
+      renderPrompt()
+    }
+  })
+
+  console.log('\x1b[1mClaude Chat\x1b[0m')
+  console.log('\x1b[90mPress Ctrl+H for help, Ctrl+C to exit\x1b[0m')
+  console.log('')
+  renderPrompt()
 }
 
 async function singleAsk(question: string) {
