@@ -1,9 +1,13 @@
 import { ANTHROPIC_API_URL } from './constants'
 import { getValidAccessToken } from './oauth'
 
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+
 export interface Message {
   role: 'user' | 'assistant'
-  content: string
+  content: string | ContentBlock[]
 }
 
 export interface ChatOptions {

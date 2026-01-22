@@ -10,12 +10,14 @@ import {
   hasValidCredentials,
   getConfigDir,
 } from './lib/storage'
-import { chat, chatStream, type Message } from './lib/client'
+import { chat, chatStream, type Message, type ContentBlock } from './lib/client'
+import { loadFile } from './cli-utils'
+import path from 'path'
 
 const MODELS = {
-  haiku: 'claude-haiku-4-5-20251001',
-  sonnet: 'claude-sonnet-4-5-20250929',
-  opus: 'claude-opus-4-5-20251101',
+  haiku: 'claude-haiku-4-5-20250514',
+  sonnet: 'claude-sonnet-4-20250514',
+  opus: 'claude-opus-4-20250514',
 } as const
 
 type ModelKey = keyof typeof MODELS
@@ -123,6 +125,7 @@ async function interactiveChat() {
   let currentModel: ModelKey = 'sonnet'
   let inputBuffer = ''
   let cursorPos = 0
+  let pendingFiles: ContentBlock[] = []
 
   const clearLine = () => {
     process.stdout.write('\r\x1b[K')
@@ -130,9 +133,10 @@ async function interactiveChat() {
 
   const renderPrompt = () => {
     clearLine()
+    const fileIndicator = pendingFiles.length > 0 ? `\x1b[35m📎${pendingFiles.length}\x1b[0m ` : ''
     const modelIndicator = `\x1b[90m[${currentModel}]\x1b[0m`
-    process.stdout.write(`${modelIndicator} You: ${inputBuffer}`)
-    const promptLen = `[${currentModel}] You: `.length
+    process.stdout.write(`${fileIndicator}${modelIndicator} You: ${inputBuffer}`)
+    const promptLen = (pendingFiles.length > 0 ? 4 : 0) + `[${currentModel}] You: `.length
     const moveBack = inputBuffer.length - cursorPos
     if (moveBack > 0) {
       process.stdout.write(`\x1b[${moveBack}D`)
@@ -141,20 +145,22 @@ async function interactiveChat() {
 
   const printHelp = () => {
     console.log('\n')
-    console.log('\x1b[90m┌─────────────────────────────────────┐\x1b[0m')
-    console.log('\x1b[90m│\x1b[0m  \x1b[1mCommands\x1b[0m                          \x1b[90m│\x1b[0m')
-    console.log('\x1b[90m├─────────────────────────────────────┤\x1b[0m')
-    console.log('\x1b[90m│\x1b[0m  \x1b[33m/haiku\x1b[0m   Switch to Haiku          \x1b[90m│\x1b[0m')
-    console.log('\x1b[90m│\x1b[0m  \x1b[33m/sonnet\x1b[0m  Switch to Sonnet         \x1b[90m│\x1b[0m')
-    console.log('\x1b[90m│\x1b[0m  \x1b[33m/opus\x1b[0m    Switch to Opus           \x1b[90m│\x1b[0m')
-    console.log('\x1b[90m│\x1b[0m  \x1b[33m/help\x1b[0m    Show this help           \x1b[90m│\x1b[0m')
-    console.log('\x1b[90m│\x1b[0m  \x1b[33m/exit\x1b[0m    Exit                      \x1b[90m│\x1b[0m')
-    console.log('\x1b[90m└─────────────────────────────────────┘\x1b[0m')
+    console.log('\x1b[90m┌──────────────────────────────────────────────┐\x1b[0m')
+    console.log('\x1b[90m│\x1b[0m  \x1b[1mCommands\x1b[0m                                     \x1b[90m│\x1b[0m')
+    console.log('\x1b[90m├──────────────────────────────────────────────┤\x1b[0m')
+    console.log('\x1b[90m│\x1b[0m  \x1b[33m/haiku\x1b[0m          Switch to Haiku             \x1b[90m│\x1b[0m')
+    console.log('\x1b[90m│\x1b[0m  \x1b[33m/sonnet\x1b[0m         Switch to Sonnet            \x1b[90m│\x1b[0m')
+    console.log('\x1b[90m│\x1b[0m  \x1b[33m/opus\x1b[0m           Switch to Opus              \x1b[90m│\x1b[0m')
+    console.log('\x1b[90m│\x1b[0m  \x1b[33m/file <path>\x1b[0m    Attach file (image/text)   \x1b[90m│\x1b[0m')
+    console.log('\x1b[90m│\x1b[0m  \x1b[33m/clear\x1b[0m          Clear attached files        \x1b[90m│\x1b[0m')
+    console.log('\x1b[90m│\x1b[0m  \x1b[33m/help\x1b[0m           Show this help              \x1b[90m│\x1b[0m')
+    console.log('\x1b[90m│\x1b[0m  \x1b[33m/exit\x1b[0m           Exit                        \x1b[90m│\x1b[0m')
+    console.log('\x1b[90m└──────────────────────────────────────────────┘\x1b[0m')
     console.log('')
     renderPrompt()
   }
 
-  const handleCommand = (cmd: string): boolean => {
+  const handleCommand = async (cmd: string): Promise<boolean> => {
     const lower = cmd.toLowerCase()
     if (lower === '/haiku') {
       switchModel('haiku')
@@ -170,6 +176,30 @@ async function interactiveChat() {
     }
     if (lower === '/help') {
       printHelp()
+      return true
+    }
+    if (lower === '/clear') {
+      pendingFiles = []
+      clearLine()
+      console.log('\x1b[32m✓ Cleared attached files\x1b[0m')
+      renderPrompt()
+      return true
+    }
+    if (lower.startsWith('/file ')) {
+      const filePath = cmd.slice(6).trim()
+      const resolved = path.resolve(filePath)
+      const block = await loadFile(resolved)
+      if (block) {
+        pendingFiles.push(block)
+        const fileName = path.basename(resolved)
+        const fileType = block.type === 'image' ? '🖼️' : '📄'
+        clearLine()
+        console.log(`\x1b[32m✓ Attached: ${fileType} ${fileName}\x1b[0m`)
+      } else {
+        clearLine()
+        console.log(`\x1b[31m✗ File not found: ${filePath}\x1b[0m`)
+      }
+      renderPrompt()
       return true
     }
     if (lower === '/exit' || lower === 'exit') {
@@ -189,11 +219,13 @@ async function interactiveChat() {
       return
     }
 
-    if (handleCommand(trimmed)) {
+    if (await handleCommand(trimmed)) {
       return
     }
 
-    messages.push({ role: 'user', content: trimmed })
+    const content: ContentBlock[] = [...pendingFiles, { type: 'text', text: trimmed }]
+    pendingFiles = []
+    messages.push({ role: 'user', content })
     console.log('')
 
     try {
