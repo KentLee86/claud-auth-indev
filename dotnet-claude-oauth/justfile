@@ -72,7 +72,7 @@ build-release:
 test-coverage:
     dotnet test --collect:"XPlat Code Coverage"
 
-# Check if authenticated (uses TypeScript credentials)
+# Check if authenticated
 check-auth:
     @echo "Checking for credentials at ~/.claude-oauth/credentials.json..."
     @if [ -f ~/.claude-oauth/credentials.json ]; then \
@@ -80,7 +80,7 @@ check-auth:
         echo "  Expires at: $$(cat ~/.claude-oauth/credentials.json | grep -o '"expiresAt":[0-9]*' | cut -d: -f2)"; \
     else \
         echo "✗ No credentials found"; \
-        echo "  Run: cd .. && bun run login"; \
+        echo "  Run: just login"; \
     fi
 
 # Quick test - run fast unit tests only
@@ -94,6 +94,22 @@ watch:
 # Pack NuGet package
 pack:
     dotnet pack ClaudeOAuth -c Release
+
+# CLI commands
+login:
+    dotnet run --project ClaudeOAuth.Cli -- login
+
+logout:
+    dotnet run --project ClaudeOAuth.Cli -- logout
+
+status:
+    dotnet run --project ClaudeOAuth.Cli -- status
+
+chat:
+    dotnet run --project ClaudeOAuth.Cli -- chat
+
+ask *args:
+    dotnet run --project ClaudeOAuth.Cli -- ask {{args}}
 
 # Show test summary
 summary:
@@ -110,6 +126,13 @@ summary:
     @echo "  just test-dice     - Dice image analysis"
     @echo "  just test-text     - Text file analysis"
     @echo "  just test-vision   - All vision tests"
+    @echo ""
+    @echo "CLI Commands:"
+    @echo "  just login         - Start OAuth flow"
+    @echo "  just logout        - Clear credentials"
+    @echo "  just status        - Check auth status"
+    @echo "  just chat          - Interactive chat"
+    @echo "  just ask \"...\"     - Single question"
     @echo ""
     @echo "Other:"
     @echo "  just test          - Run all tests"

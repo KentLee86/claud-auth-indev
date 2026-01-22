@@ -59,6 +59,9 @@ ClaudeOAuth/
 ├── OAuth.cs        # OAuth flow (token exchange, refresh)
 └── Client.cs       # API client (Chat, ChatStream, Ask)
 
+ClaudeOAuth.Cli/
+└── Program.cs      # CLI entry point (login, logout, status, chat, ask)
+
 ClaudeOAuth.Tests/
 ├── __fixtures__/   # Test files (cat.jpg, dice.png, sample.txt)
 └── *Tests.cs       # Unit and integration tests
@@ -166,10 +169,32 @@ if (!await EnsureAuthenticatedAsync()) return;
 - Blocking calls (`.Result`, `.Wait()`) in async code
 - Committing credentials
 
+## CLI Commands
+
+```bash
+dotnet run --project ClaudeOAuth.Cli -- login     # Start OAuth flow
+dotnet run --project ClaudeOAuth.Cli -- logout    # Clear credentials
+dotnet run --project ClaudeOAuth.Cli -- status    # Check auth status
+dotnet run --project ClaudeOAuth.Cli -- chat      # Interactive chat
+dotnet run --project ClaudeOAuth.Cli -- ask "?"   # Single question
+```
+
+### Interactive Chat Commands
+
+| Command | Description |
+|---------|-------------|
+| `/haiku` | Switch to Claude Haiku |
+| `/sonnet` | Switch to Claude Sonnet |
+| `/opus` | Switch to Claude Opus |
+| `/file <path>` | Attach file (image/text) |
+| `/clear` | Clear attached files |
+| `/help` | Show help |
+| `/exit` | Exit chat |
+
 ## Authentication
 
 Credentials stored at `~/.claude-oauth/credentials.json`. To authenticate:
 
 ```bash
-cd .. && bun run login  # Use TypeScript OAuth login
+dotnet run --project ClaudeOAuth.Cli -- login
 ```
