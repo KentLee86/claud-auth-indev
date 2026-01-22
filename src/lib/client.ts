@@ -37,8 +37,12 @@ interface AnthropicMessageResponse {
   }
 }
 
-const DEFAULT_MODEL = 'claude-sonnet-4-20250514'
+// const DEFAULT_MODEL = 'claude-haiku-4-5'
+const DEFAULT_MODEL = 'claude-opus-4-5'
 const DEFAULT_MAX_TOKENS = 4096
+const CLAUDE_CODE_SYSTEM_PREFIX = "You are Claude Code, Anthropic's official CLI for Claude."
+const ANTHROPIC_BETA_FLAGS = 'oauth-2025-04-20,interleaved-thinking-2025-05-14'
+const USER_AGENT = 'claude-cli/2.1.2 (external, cli)'
 
 export async function chat(
   messages: Message[],
@@ -46,18 +50,23 @@ export async function chat(
 ): Promise<ChatResponse> {
   const accessToken = await getValidAccessToken()
 
-  const response = await fetch(`${ANTHROPIC_API_URL}/messages`, {
+  const systemPrompt = options.system
+    ? `${CLAUDE_CODE_SYSTEM_PREFIX}\n\n${options.system}`
+    : CLAUDE_CODE_SYSTEM_PREFIX
+
+  const response = await fetch(`${ANTHROPIC_API_URL}/messages?beta=true`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${accessToken}`,
       'anthropic-version': '2023-06-01',
-      'anthropic-beta': 'oauth-2025-04-20',
+      'anthropic-beta': ANTHROPIC_BETA_FLAGS,
+      'user-agent': USER_AGENT,
     },
     body: JSON.stringify({
       model: options.model ?? DEFAULT_MODEL,
       max_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
-      system: options.system,
+      system: systemPrompt,
       messages: messages.map((m) => ({
         role: m.role,
         content: m.content,
@@ -90,18 +99,23 @@ export async function* chatStream(
 ): AsyncGenerator<string, ChatResponse> {
   const accessToken = await getValidAccessToken()
 
-  const response = await fetch(`${ANTHROPIC_API_URL}/messages`, {
+  const systemPrompt = options.system
+    ? `${CLAUDE_CODE_SYSTEM_PREFIX}\n\n${options.system}`
+    : CLAUDE_CODE_SYSTEM_PREFIX
+
+  const response = await fetch(`${ANTHROPIC_API_URL}/messages?beta=true`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${accessToken}`,
       'anthropic-version': '2023-06-01',
-      'anthropic-beta': 'oauth-2025-04-20',
+      'anthropic-beta': ANTHROPIC_BETA_FLAGS,
+      'user-agent': USER_AGENT,
     },
     body: JSON.stringify({
       model: options.model ?? DEFAULT_MODEL,
       max_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
-      system: options.system,
+      system: systemPrompt,
       stream: true,
       messages: messages.map((m) => ({
         role: m.role,
