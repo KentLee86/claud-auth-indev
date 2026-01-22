@@ -28,6 +28,19 @@ describe('file loading', () => {
     }
   })
 
+  test('loads jpg file with correct media type', async () => {
+    const { loadFile } = await import('./cli-utils')
+    const result = await loadFile(path.join(TEST_FILES_DIR, 'cat.jpg'))
+    
+    expect(result).not.toBeNull()
+    expect(result?.type).toBe('image')
+    if (result?.type === 'image') {
+      expect(result.source.type).toBe('base64')
+      expect(result.source.media_type).toBe('image/jpeg')
+      expect(result.source.data.length).toBeGreaterThan(1000)
+    }
+  })
+
   test('returns null for non-existent file', async () => {
     const { loadFile } = await import('./cli-utils')
     const result = await loadFile('/nonexistent/path/file.txt')
