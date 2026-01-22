@@ -1,0 +1,23 @@
+{
+  "name": "claude-oauth-client",
+  "version": "1.0.0",
+  "description": "Personal Claude OAuth client for API access",
+  "module": "src/index.ts",
+  "type": "module",
+  "bin": {
+    "claude-oauth": "./src/cli.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/cli.ts",
+    "login": "bun run src/cli.ts login",
+    "status": "bun run src/cli.ts status",
+    "chat": "bun run src/cli.ts chat",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
