@@ -127,13 +127,15 @@ Credentials are stored in `~/.claude-oauth/credentials.json` with 600 permission
 ### Installation
 
 ```bash
-# From GitHub
+# From GitHub (includes both CLI and library)
 pip install git+https://github.com/code-yeongyu/claude-oauth.git#subdirectory=python
 
 # Local development
 cd python
 pip install -e .
 ```
+
+설치 후 CLI(`claude-oauth`)와 라이브러리(`from claude_oauth import ...`) 모두 사용 가능합니다.
 
 ### CLI
 
