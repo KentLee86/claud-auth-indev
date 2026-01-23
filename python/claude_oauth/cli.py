@@ -30,7 +30,8 @@ MODELS = {
 }
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_IMAGE_SIZE_BASE64 = 5 * 1024 * 1024  # 5MB (API limit for base64)
+MAX_IMAGE_SIZE_RAW = int(MAX_IMAGE_SIZE_BASE64 / 1.34)  # ~3.7MB (accounts for base64 overhead)
 
 
 def get_media_type(ext: str) -> str:
@@ -44,7 +45,7 @@ def get_media_type(ext: str) -> str:
     return types.get(ext, "application/octet-stream")
 
 
-def compress_image(file_path: Path, max_size: int = MAX_IMAGE_SIZE) -> tuple[bytes, str]:
+def compress_image(file_path: Path, max_size: int = MAX_IMAGE_SIZE_RAW) -> tuple[bytes, str]:
     img = Image.open(file_path)
     
     if img.mode in ("RGBA", "P"):
@@ -95,7 +96,7 @@ def load_file(file_path: Path) -> ContentBlock | None:
     if ext in IMAGE_EXTENSIONS:
         raw_data = file_path.read_bytes()
         
-        if len(raw_data) > MAX_IMAGE_SIZE:
+        if len(raw_data) > MAX_IMAGE_SIZE_RAW:
             compressed_data, media_type = compress_image(file_path)
             original_mb = len(raw_data) / (1024 * 1024)
             compressed_mb = len(compressed_data) / (1024 * 1024)
@@ -172,16 +173,35 @@ async def _stream_and_print(stream: ChatStream) -> None:
         print(chunk, end="", flush=True)
 
 
-def cmd_ask(question: str) -> None:
+def cmd_ask(question: str, file_paths: list[str] | None = None, model: str = "sonnet") -> None:
     if not has_valid_credentials():
         print('Not authenticated. Run "login" first.')
         sys.exit(1)
 
-    print("Claude: ", end="", flush=True)
+    if model not in MODELS:
+        print(f"\033[31mUnknown model: {model}. Use: {', '.join(MODELS.keys())}\033[0m")
+        sys.exit(1)
+
+    content: list[ContentBlock] = []
+    
+    if file_paths:
+        for fp in file_paths:
+            resolved = Path(fp).resolve()
+            block = load_file(resolved)
+            if block:
+                print(f"\033[32m> Attached: {resolved.name}\033[0m")
+                content.append(block)
+            else:
+                print(f"\033[31m> File not found: {fp}\033[0m")
+                sys.exit(1)
+    
+    content.append({"type": "text", "text": question})
+
+    print(f"\033[36m[{model}]\033[0m Claude: ", end="", flush=True)
     start_time = time.perf_counter()
 
-    messages: list[Message] = [{"role": "user", "content": question}]
-    stream = chat_stream(messages)
+    messages: list[Message] = [{"role": "user", "content": content}]
+    stream = chat_stream(messages, ChatOptions(model=MODELS[model]))
 
     asyncio.run(_stream_and_print(stream))
 
@@ -315,6 +335,8 @@ def main() -> None:
 Examples:
   claude-oauth login
   claude-oauth ask "What is 2+2?"
+  claude-oauth ask -m haiku "Quick question"
+  claude-oauth ask -m opus -f image.png "Analyze this"
   claude-oauth chat
 """,
     )
@@ -328,6 +350,8 @@ Examples:
 
     ask_parser = subparsers.add_parser("ask", help="Send a single message")
     ask_parser.add_argument("question", nargs="+", help="Your question")
+    ask_parser.add_argument("-f", "--file", action="append", dest="files", help="Attach file (can use multiple times)")
+    ask_parser.add_argument("-m", "--model", default="sonnet", choices=["haiku", "sonnet", "opus"], help="Model to use (default: sonnet)")
 
     args = parser.parse_args()
 
@@ -340,7 +364,7 @@ Examples:
     elif args.command == "chat":
         cmd_chat()
     elif args.command == "ask":
-        cmd_ask(" ".join(args.question))
+        cmd_ask(" ".join(args.question), args.files, args.model)
     else:
         parser.print_help()
 

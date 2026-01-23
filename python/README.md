@@ -11,33 +11,54 @@ pip install -e .
 ## CLI
 
 ```bash
-claude-oauth login    # Authenticate
-claude-oauth status   # Check status
-claude-oauth ask "What is 2+2?"
-claude-oauth chat     # Interactive chat
-claude-oauth logout   # Clear credentials
+claude-oauth login     # Authenticate
+claude-oauth status    # Check status
+claude-oauth logout    # Clear credentials
+claude-oauth chat      # Interactive chat
 ```
 
-### Windows
-
-Windows에서 `claude-oauth` 명령어가 작동하지 않는 경우, 모듈로 직접 실행하세요:
+### ask
 
 ```bash
-python -m claude_oauth.cli login    # 인증
-python -m claude_oauth.cli status   # 상태 확인
-python -m claude_oauth.cli ask "What is 2+2?"
-python -m claude_oauth.cli chat     # 대화형 채팅
-python -m claude_oauth.cli logout   # 인증 정보 삭제
+claude-oauth ask "What is 2+2?"
+claude-oauth ask -m haiku "Quick question"
+claude-oauth ask -m opus "Complex question"
+claude-oauth ask -f image.png "What do you see?"
+claude-oauth ask -m haiku -f a.png -f b.png "Compare these"
 ```
+
+Options:
+- `-m, --model {haiku,sonnet,opus}` : Model (default: sonnet)
+- `-f, --file <path>` : Attach file (can use multiple times)
+
+### chat
+
+```bash
+claude-oauth chat
+```
+
+Commands in chat:
+- `/haiku`, `/sonnet`, `/opus` : Switch model
+- `/file <path>` : Attach file
+- `/clear` : Clear attached files
+- `/help` : Show help
+- `/exit` : Exit
+
+### Image Compression
+
+Images over 3.7MB are automatically compressed to stay under the 5MB API limit (base64 encoded).
 
 ## Library
 
 ```python
-from claude_oauth import ask, chat, chat_stream, has_valid_credentials
+from claude_oauth import ask, chat, chat_stream, has_valid_credentials, ChatOptions
 import asyncio
 
 # Simple question
 answer = ask("Hello!")
+
+# With model option
+answer = ask("Hello!", ChatOptions(model="claude-haiku-4-5-20251001"))
 
 # Streaming
 stream = chat_stream([{"role": "user", "content": "Tell a story"}])
@@ -46,3 +67,26 @@ async def run():
         print(chunk, end="")
 asyncio.run(run())
 ```
+
+### Image Analysis
+
+```python
+import base64
+from pathlib import Path
+from claude_oauth import chat
+
+image_data = base64.b64encode(Path("image.png").read_bytes()).decode()
+
+response = chat([{
+    "role": "user",
+    "content": [
+        {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": image_data}},
+        {"type": "text", "text": "What do you see?"}
+    ]
+}])
+print(response.content)
+```
+
+## Credentials
+
+Stored in `~/.claude-oauth/credentials.json` (shared with TypeScript version).

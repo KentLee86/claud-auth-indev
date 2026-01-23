@@ -35,3 +35,35 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 bun.lock
 
 nul
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+*.egg
+.installed.cfg
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+venv/
+ENV/
+.pytype/
+.mypy_cache/
+.pytest_cache/
