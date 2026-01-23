@@ -18,6 +18,18 @@ claude-oauth chat     # Interactive chat
 claude-oauth logout   # Clear credentials
 ```
 
+### Windows
+
+Windows에서 `claude-oauth` 명령어가 작동하지 않는 경우, 모듈로 직접 실행하세요:
+
+```bash
+python -m claude_oauth.cli login    # 인증
+python -m claude_oauth.cli status   # 상태 확인
+python -m claude_oauth.cli ask "What is 2+2?"
+python -m claude_oauth.cli chat     # 대화형 채팅
+python -m claude_oauth.cli logout   # 인증 정보 삭제
+```
+
 ## Library
 
 ```python

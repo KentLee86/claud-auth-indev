@@ -44,6 +44,48 @@ def get_media_type(ext: str) -> str:
     return types.get(ext, "application/octet-stream")
 
 
+def compress_image(file_path: Path, max_size: int = MAX_IMAGE_SIZE) -> tuple[bytes, str]:
+    img = Image.open(file_path)
+    
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+    
+    output_format = "JPEG"
+    media_type = "image/jpeg"
+    
+    quality = 95
+    while quality >= 20:
+        buffer = io.BytesIO()
+        img.save(buffer, format=output_format, quality=quality, optimize=True)
+        data = buffer.getvalue()
+        
+        if len(data) <= max_size:
+            return data, media_type
+        
+        quality -= 10
+    
+    while True:
+        width, height = img.size
+        new_width = int(width * 0.8)
+        new_height = int(height * 0.8)
+        
+        if new_width < 100 or new_height < 100:
+            break
+            
+        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        buffer = io.BytesIO()
+        img.save(buffer, format=output_format, quality=50, optimize=True)
+        data = buffer.getvalue()
+        
+        if len(data) <= max_size:
+            return data, media_type
+    
+    buffer = io.BytesIO()
+    img.save(buffer, format=output_format, quality=30, optimize=True)
+    return buffer.getvalue(), media_type
+
+
 def load_file(file_path: Path) -> ContentBlock | None:
     if not file_path.exists():
         return None
@@ -51,10 +93,21 @@ def load_file(file_path: Path) -> ContentBlock | None:
     ext = file_path.suffix.lower()
 
     if ext in IMAGE_EXTENSIONS:
-        data = base64.b64encode(file_path.read_bytes()).decode("ascii")
+        raw_data = file_path.read_bytes()
+        
+        if len(raw_data) > MAX_IMAGE_SIZE:
+            compressed_data, media_type = compress_image(file_path)
+            original_mb = len(raw_data) / (1024 * 1024)
+            compressed_mb = len(compressed_data) / (1024 * 1024)
+            print(f"\033[33m  Compressed: {original_mb:.1f}MB -> {compressed_mb:.1f}MB\033[0m")
+            data = base64.b64encode(compressed_data).decode("ascii")
+        else:
+            data = base64.b64encode(raw_data).decode("ascii")
+            media_type = get_media_type(ext)
+        
         return {
             "type": "image",
-            "source": {"type": "base64", "media_type": get_media_type(ext), "data": data},
+            "source": {"type": "base64", "media_type": media_type, "data": data},
         }
 
     content = file_path.read_text()
