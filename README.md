@@ -119,3 +119,53 @@ interface ChatResponse {
 ## Storage
 
 Credentials are stored in `~/.claude-oauth/credentials.json` with 600 permissions.
+
+---
+
+## Python
+
+### Installation
+
+```bash
+# From GitHub
+pip install git+https://github.com/code-yeongyu/claude-oauth.git#subdirectory=python
+
+# Local development
+cd python
+pip install -e .
+```
+
+### CLI
+
+```bash
+claude-oauth login                              # Authenticate
+claude-oauth status                             # Check status
+claude-oauth logout                             # Clear credentials
+claude-oauth chat                               # Interactive chat
+claude-oauth ask "What is 2+2?"                 # Single question
+claude-oauth ask -m haiku "Quick question"      # With model option
+claude-oauth ask -f image.png "What do you see?" # With file attachment
+```
+
+Options:
+- `-m, --model {haiku,sonnet,opus}` : Model selection (default: sonnet)
+- `-f, --file <path>` : Attach file (can use multiple times)
+
+### Library
+
+```python
+from claude_oauth import ask, chat, chat_stream, has_valid_credentials, ChatOptions
+import asyncio
+
+# Simple question
+answer = ask("Hello!")
+
+# With model option
+answer = ask("Hello!", ChatOptions(model="claude-haiku-4-5-20251001"))
+
+# Streaming
+async def run():
+    async for chunk in chat_stream([{"role": "user", "content": "Tell a story"}]):
+        print(chunk, end="")
+asyncio.run(run())
+```
